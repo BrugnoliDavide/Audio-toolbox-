@@ -1,0 +1,94 @@
+/* ─── Reset & base ─────────────────────────────────────────── */
+
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    background-color: #1a1a2e;
+    font-family: 'Roboto', sans-serif;
+    overflow: hidden;
+}
+
+/* ─── Griglia ──────────────────────────────────────────────── */
+
+#grid {
+    display: grid;
+    width: 100vw;
+    height: 100vh;
+    /* rows e cols vengono iniettate dinamicamente dal Presenter
+       tramite la proprietà CSS personalizzata:
+       grid-template-columns e grid-template-rows             */
+}
+
+/* ─── Singola cella ────────────────────────────────────────── */
+
+.cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    background-color: #263238;
+    border: 1px solid #546e7a;
+
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+
+    transition: background-color 0.15s ease,
+                transform        0.10s ease;
+}
+
+.cell:active {
+    transform: scale(0.96);
+    background-color: #37474f;
+}
+
+/* Cella con audio associato */
+.cell.has-audio {
+    background-color: #2e7d32;
+}
+
+.cell.has-audio:active {
+    background-color: #1b5e20;
+}
+
+/* ─── Testo della cella ────────────────────────────────────── */
+
+.cell-label {
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 500;
+    text-align: center;
+    line-height: 1.3;
+
+    max-width: 90%;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+/* ─── Schermata di errore ──────────────────────────────────── */
+
+#error-screen {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100vw;
+    height: 100vh;
+    background-color: #4a0000;
+}
+
+#error-screen p {
+    color: #ef9a9a;
+    font-size: 14px;
+    font-weight: 600;
+    text-align: center;
+    padding: 24px;
+    max-width: 80%;
+}
