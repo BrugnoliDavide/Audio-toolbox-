@@ -2,11 +2,11 @@ package DBsoftware.Audiodeck;
 
 import android.os.Bundle;
 import android.widget.ImageButton;
-import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.lifecycle.ViewModelProvider;
 
+import DBsoftware.Audiodeck.Presenter.AddBlockDialog;
 import DBsoftware.Audiodeck.Presenter.TablePresenter;
 import DBsoftware.Audiodeck.controller.TableController;
 
@@ -22,13 +22,6 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // ── Barra superiore ────────────────────────────────────────────────
-        ImageButton btnAdd = findViewById(R.id.btnAdd);
-        btnAdd.setOnClickListener(v -> {
-            // TODO: aprire dialog per aggiungere/configurare un blocco
-            Toast.makeText(this, "Aggiungi blocco", Toast.LENGTH_SHORT).show();
-        });
-
         // ── Controller ────────────────────────────────────────────────────
         int rows = getIntent().getIntExtra(EXTRA_ROWS, DEFAULT_ROWS);
         int cols = getIntent().getIntExtra(EXTRA_COLS, DEFAULT_COLS);
@@ -36,8 +29,6 @@ public class MainActivity extends AppCompatActivity {
         TableController controller = new ViewModelProvider(this)
                 .get(TableController.class);
 
-        // initTable viene chiamato solo alla prima creazione.
-        // Alla ricreazione (rotazione) il ViewModel è già inizializzato.
         if (savedInstanceState == null) {
             controller.initTable(rows, cols);
 
@@ -46,5 +37,15 @@ public class MainActivity extends AppCompatActivity {
                     .replace(R.id.fragmentContainer, new TablePresenter())
                     .commit();
         }
+
+        // ── Barra superiore: bottone + ────────────────────────────────────
+        ImageButton btnAdd = findViewById(R.id.btnAdd);
+        btnAdd.setOnClickListener(v -> {
+            // Apre il dialog solo se non è già visibile (evita duplicati da click rapidi)
+            if (getSupportFragmentManager().findFragmentByTag(AddBlockDialog.TAG) == null) {
+                new AddBlockDialog()
+                        .show(getSupportFragmentManager(), AddBlockDialog.TAG);
+            }
+        });
     }
 }
