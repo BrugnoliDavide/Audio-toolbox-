@@ -26,9 +26,9 @@ public class Table {
         return instance;
     }
 
-    public static synchronized Table getInstance()      { return instance; }
-    public static synchronized boolean hasInstance()    { return instance != null; }
-    public static synchronized void    resetInstance()  { instance = null; }
+    public static synchronized Table getInstance()     { return instance; }
+    public static synchronized boolean hasInstance()   { return instance != null; }
+    public static synchronized void resetInstance()    { instance = null; }
 
     // ─── Inizializzazione ──────────────────────────────────────────────────
 
@@ -65,16 +65,21 @@ public class Table {
     }
 
     /**
-     * Configura il blocco in posizione (row, col) con titolo e percorso audio.
+     * Configura il blocco in posizione (row, col) con titolo, percorso audio
+     * e URI dell'immagine di copertina.
      *
-     * @return true se l'operazione è riuscita, false se le coordinate sono fuori range.
+     * @param imageUri URI stringa dell'immagine (può essere null).
+     * @return true se riuscito, false se le coordinate sono fuori range.
      */
     public synchronized boolean assignBlock(int row, int col,
-                                            String title, String audioPath) {
+                                            String title,
+                                            String audioPath,
+                                            String imageUri) {
         SoundBlock block = getBlock(row, col);
         if (block == null) return false;
         block.setTitle(title);
         block.setAudioPath(audioPath);
+        block.setImagePath(imageUri);
         return true;
     }
 

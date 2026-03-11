@@ -1,7 +1,11 @@
 package DBsoftware.Audiodeck.Presenter;
 
 import android.annotation.SuppressLint;
+import android.content.ContentResolver;
+import android.net.Uri;
 import android.os.Bundle;
+import android.util.Base64;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -15,7 +19,9 @@ import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.List;
 
 import DBsoftware.Audiodeck.controller.BlockUiData;
@@ -26,14 +32,13 @@ import DBsoftware.Audiodeck.controller.TableUiState;
  * Presenter MVCP — Fragment che presenta la griglia come pagina HTML/CSS
  * all'interno di una {@link WebView}.
  *
- * Responsabilità:
- * - Osservare la {@link LiveData} del {@link TableController}.
- * - Costruire l'HTML della griglia iniettando righe, colonne e dati dei blocchi.
- * - Caricare il foglio di stile {@code assets/table_grid.css}.
- * - Esporre un {@link JavascriptInterface} (bridge JS→Java) per ricevere
- *   i click delle celle e delegarli al Controller.
+ * Le immagini di copertina vengono convertite in data URI base64 prima
+ * di essere iniettate nell'HTML, rendendo il rendering indipendente
+ * dal tipo di URI sorgente (content://, file://, ecc.).
  */
 public class TablePresenter extends Fragment {
+
+    private static final String TAG = "TablePresenter";
 
     private WebView         webView;
     private TableController controller;
@@ -54,19 +59,14 @@ public class TablePresenter extends Fragment {
                              @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
 
-        // Creiamo la WebView programmaticamente: nessun layout XML necessario.
         webView = new WebView(requireContext());
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
-        // Necessario per caricare file da assets/ tramite file:///android_asset/
         settings.setAllowFileAccess(true);
 
-        // Bridge: metodi annotati @JavascriptInterface sono chiamabili da JS
-        // con window.Android.<metodo>()
         webView.addJavascriptInterface(new JsBridge(), "Android");
 
-        // La WebView occupa l'intera area del Fragment
         FrameLayout root = new FrameLayout(requireContext());
         root.addView(webView, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -78,8 +78,6 @@ public class TablePresenter extends Fragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-
-        // Osserva lo stato del Controller e aggiorna la WebView ad ogni emissione.
         controller.getUiState().observe(getViewLifecycleOwner(), this::renderState);
     }
 
@@ -98,17 +96,12 @@ public class TablePresenter extends Fragment {
         if (webView == null) return;
 
         if (state instanceof TableUiState.Loading) {
-            // Durante il loading mostriamo una pagina minima;
-            // in genere questo stato è brevissimo.
-            webView.loadData(
-                    buildLoadingHtml(),
-                    "text/html",
-                    "UTF-8");
+            webView.loadData(buildLoadingHtml(), "text/html", "UTF-8");
 
         } else if (state instanceof TableUiState.Ready) {
             TableUiState.Ready ready = (TableUiState.Ready) state;
             webView.loadDataWithBaseURL(
-                    "file:///android_asset/",   // base URL: permette al CSS di risolvere @import e url()
+                    "file:///android_asset/",
                     buildGridHtml(ready),
                     "text/html",
                     "UTF-8",
@@ -116,21 +109,12 @@ public class TablePresenter extends Fragment {
 
         } else if (state instanceof TableUiState.Error) {
             TableUiState.Error error = (TableUiState.Error) state;
-            webView.loadData(
-                    buildErrorHtml(error.getMessage()),
-                    "text/html",
-                    "UTF-8");
+            webView.loadData(buildErrorHtml(error.getMessage()), "text/html", "UTF-8");
         }
     }
 
     // ─── Costruzione HTML ──────────────────────────────────────────────────
 
-    /**
-     * Costruisce la pagina HTML completa della griglia.
-     * Il CSS viene letto da assets/ tramite {@link CssProvider}:
-     * per cambiare stile è sufficiente modificare il file CSS
-     * senza toccare questo file.
-     */
     private String buildGridHtml(TableUiState.Ready state) {
         int rows = state.getRows();
         int cols = state.getCols();
@@ -139,22 +123,22 @@ public class TablePresenter extends Fragment {
         try {
             css = CssProvider.load(requireContext());
         } catch (IOException e) {
-            // Fallback: griglia visibile anche senza CSS
             css = "#grid{display:grid;width:100vw;height:100vh;}" +
-                    ".cell{display:flex;align-items:center;justify-content:center;" +
-                    "border:1px solid #546e7a;background:#263238;}" +
+                    ".cell{display:flex;flex-direction:column;align-items:center;" +
+                    "justify-content:center;border:1px solid #546e7a;background:#263238;}" +
+                    ".cell-cover{width:100%;flex:1;object-fit:cover;}" +
                     ".cell-label{color:#fff;font-size:12px;font-family:sans-serif;}";
         }
 
         StringBuilder sb = new StringBuilder();
         sb.append("<!DOCTYPE html><html><head>")
                 .append("<meta charset='UTF-8'>")
-                .append("<meta name='viewport' content='width=device-width, initial-scale=1.0, user-scalable=no'>")
+                .append("<meta name='viewport' content='width=device-width,initial-scale=1.0,user-scalable=no'>")
                 .append("<style>").append(css).append("</style>")
                 .append("</head><body>")
                 .append("<div id='grid' style='")
-                .append("grid-template-columns: repeat(").append(cols).append(", 1fr);")
-                .append("grid-template-rows: repeat(").append(rows).append(", 1fr);")
+                .append("grid-template-columns:repeat(").append(cols).append(",1fr);")
+                .append("grid-template-rows:repeat(").append(rows).append(",1fr);")
                 .append("'>")
                 .append(buildCells(state))
                 .append("</div>")
@@ -169,12 +153,25 @@ public class TablePresenter extends Fragment {
 
         for (BlockUiData block : blocks) {
             String cssClass = block.hasAudio() ? "cell has-audio" : "cell";
-            // Il click chiama il bridge JS→Java passando riga e colonna.
+
             sb.append("<div class='").append(cssClass).append("'")
                     .append(" onclick=\"window.Android.onBlockClicked(")
                     .append(block.getRow()).append(",").append(block.getCol())
-                    .append(")\">")
-                    .append("<span class='cell-label'>")
+                    .append(")\">");
+
+            // ── Immagine di copertina ────────────────────────────────────────
+            String imageUri = block.getImageUri();
+            if (imageUri != null && !imageUri.isEmpty()) {
+                String dataUri = toDataUri(imageUri);
+                if (dataUri != null) {
+                    sb.append("<img class='cell-cover' src='")
+                            .append(dataUri)
+                            .append("' alt=''>");
+                }
+            }
+
+            // ── Titolo ───────────────────────────────────────────────────────
+            sb.append("<span class='cell-label'>")
                     .append(escapeHtml(block.getTitle()))
                     .append("</span>")
                     .append("</div>");
@@ -198,9 +195,48 @@ public class TablePresenter extends Fragment {
                 + "</div></body></html>";
     }
 
+    // ─── Conversione URI → data URI base64 ────────────────────────────────
+
+    /**
+     * Legge il contenuto dell'URI tramite ContentResolver e lo converte
+     * in un data URI base64 del tipo {@code data:<mime>;base64,<dati>}.
+     *
+     * Supporta qualsiasi schema (content://, file://) purché il
+     * ContentResolver riesca ad aprire lo stream.
+     *
+     * @param uriString URI stringa dell'immagine.
+     * @return data URI stringa, oppure null in caso di errore.
+     */
+    @Nullable
+    private String toDataUri(String uriString) {
+        try {
+            Uri uri = Uri.parse(uriString);
+            ContentResolver cr = requireContext().getContentResolver();
+
+            // Determina il MIME type (fallback: image/jpeg)
+            String mime = cr.getType(uri);
+            if (mime == null) mime = "image/jpeg";
+
+            // Legge tutti i byte
+            try (InputStream is = cr.openInputStream(uri)) {
+                if (is == null) return null;
+                ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+                byte[] chunk = new byte[8192];
+                int read;
+                while ((read = is.read(chunk)) != -1) {
+                    buffer.write(chunk, 0, read);
+                }
+                String encoded = Base64.encodeToString(buffer.toByteArray(), Base64.NO_WRAP);
+                return "data:" + mime + ";base64," + encoded;
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Impossibile convertire l'immagine in base64: " + uriString, e);
+            return null;
+        }
+    }
+
     // ─── Utilità ───────────────────────────────────────────────────────────
 
-    /** Escaping minimale per prevenire XSS nell'HTML generato. */
     private static String escapeHtml(String text) {
         if (text == null) return "";
         return text.replace("&", "&amp;")
@@ -210,19 +246,9 @@ public class TablePresenter extends Fragment {
                 .replace("'", "&#39;");
     }
 
-    // ─── JavascriptInterface (bridge JS → Java) ────────────────────────────
+    // ─── JavascriptInterface ───────────────────────────────────────────────
 
-    /**
-     * Bridge esposto alla WebView come {@code window.Android}.
-     * I metodi annotati con {@link JavascriptInterface} sono invocabili
-     * direttamente dal JavaScript della pagina.
-     *
-     * ATTENZIONE: i callback JS arrivano su un thread di background;
-     * {@link TableController#onBlockClicked} è thread-safe perché
-     * l'accesso a {@link DBsoftware.Audiodeck.model.Table} è sincronizzato.
-     */
     private class JsBridge {
-
         @JavascriptInterface
         public void onBlockClicked(int row, int col) {
             controller.onBlockClicked(row, col);

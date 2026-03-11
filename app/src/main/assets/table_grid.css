@@ -1,43 +1,45 @@
 /* ============================================================
-    table_grid.css
-    Foglio di stile per la griglia AudioDeck.
-    Caricato dalla WebView in TablePresenter.
-    Modificare solo qui per cambiare l'aspetto visivo.
-    ============================================================ */
+   table_grid.css
+   Foglio di stile per la griglia AudioDeck.
+   Caricato dalla WebView in TablePresenter via CssProvider.
+   Modificare solo qui per cambiare l'aspetto visivo.
+   ============================================================ */
 
-    /* ─── Reset & base ─────────────────────────────────────────── */
+/* ─── Reset & base ─────────────────────────────────────────── */
 
-    *, *::before, *::after {
+*, *::before, *::after {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
-    }
+}
 
-    html, body {
+html, body {
     width: 100%;
     height: 100%;
     background-color: #1a1a2e;
     font-family: 'Roboto', sans-serif;
     overflow: hidden;
-    }
+}
 
-    /* ─── Griglia ──────────────────────────────────────────────── */
+/* ─── Griglia ──────────────────────────────────────────────── */
 
-    #grid {
+#grid {
     display: grid;
     width: 100vw;
     height: 100vh;
-    /* rows e cols vengono iniettate dinamicamente dal Presenter
-    tramite la proprietà CSS personalizzata:
-    grid-template-columns e grid-template-rows             */
-    }
+    /* grid-template-columns e grid-template-rows
+       vengono iniettate inline dal Presenter        */
+}
 
-    /* ─── Singola cella ────────────────────────────────────────── */
+/* ─── Singola cella ────────────────────────────────────────── */
 
-    .cell {
+.cell {
     display: flex;
+    flex-direction: column;   /* copertina sopra, titolo sotto */
     align-items: center;
-    justify-content: center;
+    justify-content: flex-end;
+    overflow: hidden;
+    position: relative;
 
     background-color: #263238;
     border: 1px solid #546e7a;
@@ -47,55 +49,88 @@
     -webkit-user-select: none;
 
     transition: background-color 0.15s ease,
-    transform        0.10s ease;
-    }
+                transform        0.10s ease;
+}
 
-    .cell:active {
+.cell:active {
     transform: scale(0.96);
     background-color: #37474f;
-    }
+}
 
-    /* Cella con audio associato */
-    .cell.has-audio {
+/* Cella con audio associato (senza copertina) */
+.cell.has-audio {
     background-color: #2e7d32;
-    }
+}
 
-    .cell.has-audio:active {
+.cell.has-audio:active {
     background-color: #1b5e20;
-    }
+}
 
-    /* ─── Testo della cella ────────────────────────────────────── */
+/* ─── Immagine di copertina ────────────────────────────────── */
 
-    .cell-label {
+.cell-cover {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;        /* riempie la cella mantenendo le proporzioni */
+    object-position: center;
+    z-index: 0;
+}
+
+/* Sfumatura scura in basso per leggere il titolo
+   anche su immagini chiare                         */
+.cell:has(.cell-cover)::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 50%;
+    background: linear-gradient(to bottom, transparent, rgba(0,0,0,0.65));
+    z-index: 1;
+}
+
+/* ─── Titolo della cella ───────────────────────────────────── */
+
+.cell-label {
+    position: relative;
+    z-index: 2;               /* sopra la copertina e la sfumatura */
+    width: 100%;
+    padding: 4px 6px;
+
     color: #ffffff;
     font-size: 12px;
     font-weight: 500;
     text-align: center;
     line-height: 1.3;
 
-    max-width: 90%;
     overflow: hidden;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
-    }
 
-    /* ─── Schermata di errore ──────────────────────────────────── */
+    /* ombra testo per leggibilità anche senza copertina */
+    text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
 
-    #error-screen {
+/* ─── Schermata di errore ──────────────────────────────────── */
+
+#error-screen {
     display: flex;
     align-items: center;
     justify-content: center;
     width: 100vw;
     height: 100vh;
     background-color: #4a0000;
-    }
+}
 
-    #error-screen p {
+#error-screen p {
     color: #ef9a9a;
     font-size: 14px;
     font-weight: 600;
     text-align: center;
     padding: 24px;
     max-width: 80%;
-    }
+}
