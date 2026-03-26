@@ -1,12 +1,22 @@
 package DBsoftware.Audiodeck.model;
 
+import java.io.Serializable;
+
 /**
  * Model — rappresenta la tabella (griglia) di SoundBlock.
  * Singleton: esiste al più una Table alla volta.
+ *
+ * Implementa {@link Serializable} per consentire la persistenza tramite
+ * {@link TableRepository}. Il campo statico {@code instance} è dichiarato
+ * {@code transient} affinché la serializzazione non includa il riferimento
+ * singleton stesso (che verrebbe ricreato da {@link #restoreInstance}).
  */
-public class Table {
+public class Table implements Serializable {
 
-    private static Table instance;
+    private static final long serialVersionUID = 1L;
+
+    /** Riferimento singleton: transient, non serializzato. */
+    private static transient Table instance;
 
     private final int rows;
     private final int cols;
@@ -21,14 +31,28 @@ public class Table {
 
     // ─── Singleton ─────────────────────────────────────────────────────────
 
+    /** Crea un'istanza vuota se non ne esiste ancora una. */
     public static synchronized Table getInstance(int rows, int cols) {
         if (instance == null) instance = new Table(rows, cols);
         return instance;
     }
 
-    public static synchronized Table getInstance()     { return instance; }
-    public static synchronized boolean hasInstance()   { return instance != null; }
-    public static synchronized void resetInstance()    { instance = null; }
+    /** Restituisce l'istanza corrente o null se non ancora inizializzata. */
+    public static synchronized Table getInstance() { return instance; }
+
+    public static synchronized boolean hasInstance() { return instance != null; }
+
+    public static synchronized void resetInstance() { instance = null; }
+
+    /**
+     * Ripristina il singleton da un oggetto deserializzato.
+     * Chiamato da {@link TableRepository} dopo il caricamento dal disco.
+     *
+     * @param loaded Istanza caricata dalla deserializzazione.
+     */
+    public static synchronized void restoreInstance(Table loaded) {
+        instance = loaded;
+    }
 
     // ─── Inizializzazione ──────────────────────────────────────────────────
 
@@ -65,8 +89,8 @@ public class Table {
     }
 
     /**
-     * Configura il blocco in posizione (row, col) con titolo, percorso audio
-     * e URI dell'immagine di copertina.
+     * Configura il blocco in posizione (row, col) con titolo, URI audio
+     * e URI immagine di copertina.
      *
      * @param imageUri URI stringa dell'immagine (può essere null).
      * @return true se riuscito, false se le coordinate sono fuori range.

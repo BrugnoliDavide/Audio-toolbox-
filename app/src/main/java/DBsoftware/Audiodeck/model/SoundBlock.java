@@ -5,9 +5,17 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Model — rappresenta un singolo blocco sonoro nella tabella.
- * Implementa Serializable per eventuale persistenza futura.
+ *
+ * {@code serialVersionUID} esplicito per garantire compatibilità
+ * tra versioni del file serializzato.
+ *
+ * Nota: {@link AtomicInteger} è anch'esso {@link Serializable},
+ * pertanto il contatore ID_COUNTER viene serializzato insieme
+ * all'oggetto, garantendo la continuità degli ID dopo il ripristino.
  */
 public class SoundBlock implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     private static final AtomicInteger ID_COUNTER = new AtomicInteger(0);
 
@@ -46,11 +54,11 @@ public class SoundBlock implements Serializable {
 
     // ─── Getters ────────────────────────────────────────────────────────────
 
-    public int getId()          { return id; }
-    public String getTitle()    { return title; }
-    public String getImagePath(){ return imagePath; }
-    public String getAudioPath(){ return audioPath; }
-    public boolean isEmpty()    { return isEmpty; }
+    public int     getId()          { return id; }
+    public String  getTitle()       { return title; }
+    public String  getImagePath()   { return imagePath; }
+    public String  getAudioPath()   { return audioPath; }
+    public boolean isEmpty()        { return isEmpty; }
 
     // ─── Setters ────────────────────────────────────────────────────────────
 

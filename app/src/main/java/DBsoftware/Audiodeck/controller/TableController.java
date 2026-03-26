@@ -14,15 +14,17 @@ import java.util.List;
 
 import DBsoftware.Audiodeck.model.SoundBlock;
 import DBsoftware.Audiodeck.model.Table;
+import DBsoftware.Audiodeck.model.TableRepository;
 
 /**
  * Controller MVCP.
  *
  * Responsabilità:
- * - Istanziare il Singleton {@link Table} se non esiste ancora.
+ * - Caricare la {@link Table} dal disco tramite {@link TableRepository}
+ *   al primo avvio; crearne una nuova se non esiste alcun salvataggio.
  * - Esporre lo stato UI tramite {@link LiveData} al Presenter.
+ * - Salvare la Table su disco dopo ogni modifica (addSoundBlock).
  * - Gestire la riproduzione audio al click di un blocco.
- * - Gestire l'aggiunta di nuovi SoundBlock tramite {@link #addSoundBlock}.
  */
 public class TableController extends AndroidViewModel {
 
@@ -49,6 +51,16 @@ public class TableController extends AndroidViewModel {
 
     // ─── Inizializzazione ──────────────────────────────────────────────────
 
+    /**
+     * Inizializza la griglia con la seguente priorità:
+     *
+     * 1. Carica la Table serializzata dal disco ({@link TableRepository#load}).
+     * 2. Se non esiste un salvataggio, crea una nuova Table vuota con
+     *    le dimensioni fornite.
+     *
+     * @param rows Numero di righe da usare se si crea una nuova Table.
+     * @param cols Numero di colonne da usare se si crea una nuova Table.
+     */
     public void initTable(int rows, int cols) {
         if (rows <= 0 || cols <= 0) {
             _uiState.setValue(new TableUiState.Error(
@@ -56,9 +68,13 @@ public class TableController extends AndroidViewModel {
             return;
         }
         try {
-            Table table = Table.getInstance(rows, cols);
-            Log.d(TAG, "Table inizializzata: " + table.getRows() + "×" + table.getCols());
-            _uiState.setValue(buildReadyState(table));
+            boolean loaded = TableRepository.load(getApplication());
+            if (!loaded) {
+                // Prima esecuzione o file corrotto: crea una Table vuota.
+                Table.getInstance(rows, cols);
+                Log.d(TAG, "Nuova Table creata: " + rows + "×" + cols);
+            }
+            _uiState.setValue(buildReadyState(Table.getInstance()));
         } catch (Exception e) {
             Log.e(TAG, "Errore inizializzazione Table: " + e.getMessage());
             _uiState.setValue(new TableUiState.Error(
@@ -69,15 +85,11 @@ public class TableController extends AndroidViewModel {
     // ─── Aggiunta di un nuovo SoundBlock ──────────────────────────────────
 
     /**
-     * Trova il primo blocco vuoto nella griglia, lo configura con i dati
-     * forniti e aggiorna la LiveData affinché il Presenter si ridisegni.
+     * Trova il primo blocco vuoto, lo configura e persiste la Table su disco.
      *
-     * Chiamato da {@link DBsoftware.Audiodeck.Presenter.AddBlockDialog}
-     * al momento della conferma del form.
-     *
-     * @param title     Titolo da visualizzare nel riquadro.
-     * @param audioUri  URI stringa del file audio (da ACTION_OPEN_DOCUMENT).
-     * @param imageUri  URI stringa dell'immagine di copertina, può essere null.
+     * @param title    Titolo da visualizzare nel riquadro.
+     * @param audioUri URI stringa del file audio.
+     * @param imageUri URI stringa dell'immagine di copertina (può essere null).
      * @return true se il blocco è stato assegnato, false se la griglia è piena.
      */
     public boolean addSoundBlock(String title, String audioUri, String imageUri) {
@@ -86,15 +98,17 @@ public class TableController extends AndroidViewModel {
             Log.w(TAG, "addSoundBlock chiamato prima di initTable.");
             return false;
         }
+
         int[] pos = table.findFirstEmpty();
         if (pos == null) {
             Log.w(TAG, "Nessun blocco vuoto disponibile.");
             return false;
         }
+
         boolean ok = table.assignBlock(pos[0], pos[1], title, audioUri, imageUri);
         if (ok) {
             Log.d(TAG, "Blocco assegnato in (" + pos[0] + "," + pos[1] + "): " + title);
-            _uiState.setValue(buildReadyState(table));
+            persistAndNotify(table);
         }
         return ok;
     }
@@ -114,10 +128,25 @@ public class TableController extends AndroidViewModel {
         }
         String audioUri = block.getAudioPath();
         if (audioUri == null || audioUri.isBlank()) {
-            Log.d(TAG, "Blocco (" + row + "," + col + ") senza audio associato.");
+            Log.d(TAG, "Blocco (" + row + "," + col + ") senza audio.");
             return;
         }
         playSound(audioUri);
+    }
+
+    // ─── Persistenza + notifica UI ─────────────────────────────────────────
+
+    /**
+     * Salva la Table su disco e aggiorna la LiveData.
+     * Operazione atomica: la UI viene aggiornata solo se il salvataggio
+     * ha successo o comunque per non bloccare l'utente (il log segnala l'errore).
+     */
+    private void persistAndNotify(Table table) {
+        boolean saved = TableRepository.save(getApplication());
+        if (!saved) {
+            Log.e(TAG, "Salvataggio fallito. Le modifiche potrebbero non sopravvivere al riavvio.");
+        }
+        _uiState.setValue(buildReadyState(table));
     }
 
     // ─── Costruzione stato Ready ───────────────────────────────────────────
@@ -126,11 +155,11 @@ public class TableController extends AndroidViewModel {
         List<BlockUiData> blocks = new ArrayList<>(table.getRows() * table.getCols());
         for (int r = 0; r < table.getRows(); r++) {
             for (int c = 0; c < table.getCols(); c++) {
-                SoundBlock block  = table.getBlock(r, c);
-                String title      = (block != null) ? block.getTitle()     : r + "," + c;
-                String audio      = (block != null) ? block.getAudioPath() : null;
-                String image      = (block != null) ? block.getImagePath() : null;
-                boolean hasAudio  = (audio != null && !audio.isBlank());
+                SoundBlock block = table.getBlock(r, c);
+                String title     = (block != null) ? block.getTitle()     : r + "," + c;
+                String audio     = (block != null) ? block.getAudioPath() : null;
+                String image     = (block != null) ? block.getImagePath() : null;
+                boolean hasAudio = (audio != null && !audio.isBlank());
                 blocks.add(new BlockUiData(r, c, title, hasAudio, image));
             }
         }
@@ -143,7 +172,6 @@ public class TableController extends AndroidViewModel {
         try {
             if (mediaPlayer != null) { mediaPlayer.release(); mediaPlayer = null; }
             mediaPlayer = new MediaPlayer();
-            // Gli URI da ACTION_OPEN_DOCUMENT si aprono tramite ContentResolver
             android.net.Uri uri = android.net.Uri.parse(uriString);
             mediaPlayer.setDataSource(getApplication(), uri);
             mediaPlayer.prepare();
